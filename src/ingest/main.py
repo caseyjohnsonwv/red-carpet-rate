@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime, timedelta
 from os import getenv
-from time import sleep
+import re
 from typing import List
 from bs4 import BeautifulSoup
 from gcloud import storage
@@ -17,7 +17,7 @@ req.mount('http://', HTTPAdapter(max_retries=retries))
 
 
 forecast_range_days = getenv('forecast_range_days')
-forecast_range_days = int(forecast_range_days) if forecast_range_days else 10
+forecast_range_days = int(forecast_range_days) if forecast_range_days else 1
 
 
 class Promo:
@@ -54,6 +54,8 @@ class UO:
     def get_deals(check_in:str, nights:int, promo:str) -> List[HotelRate]:
         deals = []
         check_out = datetime.strftime(datetime.strptime(check_in, '%m/%d/%Y') + timedelta(days=nights), '%m/%d/%Y')
+        check_in_fmt = datetime.strftime(datetime.strptime(check_in, '%m/%d/%Y'), '%Y-%m-%d')
+        check_out_fmt = datetime.strftime(datetime.strptime(check_out, '%m/%d/%Y'), '%Y-%m-%d')
 
         full_url = f"{BASE_URL}&checkin={check_in}&nights={nights}&promo={promo}"
         resp = req.get(full_url)
@@ -62,29 +64,21 @@ class UO:
         soup = BeautifulSoup(resp.text, 'html.parser')
         names = [r.text for r in soup.find_all('a', {'class': 'wsName'})]
         rates = [r.text for r in soup.find_all('span', {'class': 'ws-number'})]
-        int_rates = []
-        for rate in rates:
-            try:
-                int_rates.append([int(str(rate)[1:])])
-            except ValueError as ex:
-                print(ex)
-
-        assert len(names) == len(rates)
-
-        check_in_fmt = datetime.strftime(datetime.strptime(check_in, '%m/%d/%Y'), '%Y-%m-%d')
-        check_out_fmt = datetime.strftime(datetime.strptime(check_out, '%m/%d/%Y'), '%Y-%m-%d')
-
         for i,rate in enumerate(rates):
-            promo = None if promo == '' else promo
-            deal = HotelRate(names[i], rate, check_in_fmt, check_out_fmt, nights, full_url, promo)
-            deals.append(deal)
+            try:
+                rate = int(re.findall('\d+', rate)[0])
+                promo = None if promo == '' else promo
+                deal = HotelRate(names[i], rate, check_in_fmt, check_out_fmt, nights, full_url, promo)
+                deals.append(deal)
+            except ValueError | IndexError as ex:
+                print(ex)
 
         return deals
 
 
 def main():
-    earliest_date = datetime.now()
-    latest_date = datetime.now() + timedelta(days=forecast_range_days - 1)
+    earliest_date = datetime.now() + timedelta(hours=2)
+    latest_date = earliest_date + timedelta(days=forecast_range_days - 1)
     max_nights = 7
 
     deals = []
@@ -97,10 +91,11 @@ def main():
                 try:
                     results = UO.get_deals(check_in_fmt, night_count, promo)
                     deals.extend(results)
+                    del results
                 except requests.exceptions.Timeout:
                     print(f"Request timed out!")
         check_in += timedelta(days=1)
-    deals.sort(key=lambda d:(d.check_in, d.rate, d.name))
+    deals.sort(key=lambda d:(d.check_in, d.total, d.name))
     
     csvpath = 'UO_Hotels.csv'
     with open(csvpath, 'w', newline='') as f:
