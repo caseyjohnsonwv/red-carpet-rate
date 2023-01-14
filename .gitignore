@@ -1,0 +1,9 @@
+# ingest microservice
+*.csv
+*.env
+*.pyc
+gcp_creds.json
+__pycache__
+
+# expose microservice
+*.db

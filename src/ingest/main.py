@@ -1,7 +1,10 @@
 import csv
 from datetime import datetime, timedelta
+from os import getenv
+from time import sleep
 from typing import List
 from bs4 import BeautifulSoup
+from gcloud import storage
 import requests
 from requests.adapters import Retry, HTTPAdapter
 
@@ -11,6 +14,10 @@ BASE_URL = 'https://reservations.universalorlando.com/ibe/default.aspx?hgID=641'
 req = requests.Session()
 retries = Retry(total=3, backoff_factor=1)
 req.mount('http://', HTTPAdapter(max_retries=retries))
+
+
+forecast_range_days = getenv('forecast_range_days')
+forecast_range_days = int(forecast_range_days) if forecast_range_days else 10
 
 
 class Promo:
@@ -55,7 +62,12 @@ class UO:
         soup = BeautifulSoup(resp.text, 'html.parser')
         names = [r.text for r in soup.find_all('a', {'class': 'wsName'})]
         rates = [r.text for r in soup.find_all('span', {'class': 'ws-number'})]
-        rates = [int(r.encode().decode('ascii')[1:]) for r in rates]
+        int_rates = []
+        for rate in rates:
+            try:
+                int_rates.append([int(str(rate)[1:])])
+            except ValueError as ex:
+                print(ex)
 
         assert len(names) == len(rates)
 
@@ -72,7 +84,7 @@ class UO:
 
 def main():
     earliest_date = datetime.now()
-    latest_date = datetime.now() + timedelta(days=0)
+    latest_date = datetime.now() + timedelta(days=forecast_range_days - 1)
     max_nights = 7
 
     deals = []
@@ -90,10 +102,17 @@ def main():
         check_in += timedelta(days=1)
     deals.sort(key=lambda d:(d.check_in, d.rate, d.name))
     
-    with open('../data/UO_Hotels.csv', 'w', newline='') as f:
+    csvpath = 'UO_Hotels.csv'
+    with open(csvpath, 'w', newline='') as f:
         writer = csv.writer(f, delimiter=',')
         writer.writerow(HotelRate.csv_header_row())
         writer.writerows([d.as_csv_row() for d in deals])
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket('uo-hotels-store')
+    blob = bucket.blob(csvpath)
+    blob.upload_from_filename(csvpath)
+    print(f"Uploaded CSV to {blob.public_url}")
+    
 
 
 if __name__ == '__main__':
