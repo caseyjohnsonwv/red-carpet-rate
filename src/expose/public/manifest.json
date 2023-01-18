@@ -1,0 +1,9 @@
+{
+    "short_name": "UO Hotels",
+    "name": "UO Hotel Discount Rates",
+    "icons": [],
+    "start_url": ".",
+    "display": "standalone",
+    "theme_color": "#000000",
+    "background_color": "#ffffff"
+  }

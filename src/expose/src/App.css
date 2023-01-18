@@ -1,0 +1,10 @@
+.App {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  /* text-align: center; */
+}
+
+td {
+  padding: 5px;
+}
