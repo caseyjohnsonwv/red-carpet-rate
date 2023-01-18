@@ -7,3 +7,6 @@ __pycache__
 
 # expose microservice
 *.db
+
+# doubly safe on these
+src/expose/node_modules
